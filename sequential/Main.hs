@@ -1,17 +1,12 @@
 import System.Environment ( getArgs )
 import Control.Monad ( forM_ )
-import Data.Char ( ord )
-import qualified Data.Map as Map
-import qualified Data.IntMap as IMap
 import Types
 import Scanner as Scanner
 import Lexer as Lexer
 import Index as Index
 
 simpleQuery :: Word -> IndexMap -> [(FilePath, Positions)]
-simpleQuery word@(c:_) map = Map.findWithDefault [] word vocabulary
-    where
-        vocabulary = IMap.findWithDefault Map.empty (ord c) map
+simpleQuery = Index.find
 
 printResult :: [(FilePath, Positions)] -> IO ()
 printResult result = do

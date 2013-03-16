@@ -1,4 +1,5 @@
-module Index ( build ) where
+module Index ( build
+             , find ) where
 
 import qualified Data.Map as Map
 import qualified Data.IntMap as IMap
@@ -19,3 +20,8 @@ build' ((file, o):os) indexMap = build' os $ Map.foldrWithKey merge indexMap o
 
 mergeVocabularies :: VocabularyMap -> VocabularyMap -> VocabularyMap
 mergeVocabularies old new = Map.unionWith (++) old new
+
+find :: Word -> IndexMap -> [(FilePath, Positions)]
+find word@(c:_) map = Map.findWithDefault [] word vocabulary
+    where
+        vocabulary =  map IMap.! (ord c)
