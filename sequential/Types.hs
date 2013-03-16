@@ -1,6 +1,7 @@
 module Types where
 
 import Data.Map
+import Data.IntMap
 
 
 type Word = String
@@ -11,4 +12,4 @@ type OccurrenceMap = Map Word Positions
 
 type VocabularyMap = Map Word [(FilePath, Positions)]
 
-type IndexMap = Map Char VocabularyMap
+type IndexMap = IntMap VocabularyMap
