@@ -13,6 +13,11 @@ simpleQuery word@(c:_) map = Map.findWithDefault [] word vocabulary
     where
         vocabulary = IMap.findWithDefault Map.empty (ord c) map
 
+printResult :: [(FilePath, Positions)] -> IO ()
+printResult result = do
+    forM_ result $ \(filePath, positions) ->
+        putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show $ length positions)
+
 main :: IO ()
 main = do
     (path:query:_) <- getArgs
@@ -21,6 +26,4 @@ main = do
     let occurrences = map (\(f, c) -> (f, Lexer.processContent c)) contents
     let indexMap = Index.build occurrences
     let result = simpleQuery query indexMap
-
-    forM_ result $ \(filePath, positions) ->
-        putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show $ length positions)
+    printResult result
