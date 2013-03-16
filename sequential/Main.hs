@@ -5,13 +5,15 @@ import Scanner as Scanner
 import Lexer as Lexer
 import Index as Index
 
-simpleQuery :: Word -> IndexMap -> [(FilePath, Positions)]
-simpleQuery = Index.find
+simpleQuery :: Word -> IndexMap -> [(FilePath, Int)]
+simpleQuery w m = map (\(path, positions) -> (path, length positions)) result
+    where
+        result = Index.find w m
 
-printResult :: [(FilePath, Positions)] -> IO ()
+printResult :: [(FilePath, Int)] -> IO ()
 printResult result = do
-    forM_ result $ \(filePath, positions) ->
-        putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show $ length positions)
+    forM_ result $ \(filePath, total) ->
+        putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show total)
 
 main :: IO ()
 main = do
