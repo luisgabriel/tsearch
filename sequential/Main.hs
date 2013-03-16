@@ -1,5 +1,5 @@
 import System.Environment ( getArgs )
-import Control.Monad ( forM_ )
+import Control.Monad ( forM, forM_ )
 import Data.List ( sortBy )
 import Data.Monoid ( mconcat )
 import Data.Ord ( comparing )
@@ -23,8 +23,12 @@ main :: IO ()
 main = do
     (path:query:_) <- getArgs
     files <- Scanner.getAllFiles path
-    contents <- mapM Lexer.processFile files
-    let occurrences = map (\(f, c) -> (f, Lexer.processContent c)) contents
+
+    occurrences <- forM files $ \path -> do
+        content <- readFile path
+        let occurrenceMap = Lexer.processContent content
+        return (path, occurrenceMap)
+
     let indexMap = Index.build occurrences
     let result = simpleQuery query indexMap
     printResult result
