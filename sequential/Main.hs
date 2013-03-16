@@ -1,5 +1,8 @@
 import System.Environment ( getArgs )
 import Control.Monad ( forM_ )
+import Data.List ( sortBy )
+import Data.Monoid ( mconcat )
+import Data.Ord ( comparing )
 import Types
 import Scanner as Scanner
 import Lexer as Lexer
@@ -12,7 +15,8 @@ simpleQuery w m = map (\(path, positions) -> (path, length positions)) result
 
 printResult :: [(FilePath, Int)] -> IO ()
 printResult result = do
-    forM_ result $ \(filePath, total) ->
+    let orderedResult = sortBy (mconcat [flip $ comparing snd, comparing fst]) result
+    forM_ orderedResult $ \(filePath, total) ->
         putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show total)
 
 main :: IO ()
