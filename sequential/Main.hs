@@ -3,15 +3,12 @@ import Control.Monad ( forM, forM_ )
 import Data.List ( sortBy )
 import Data.Monoid ( mconcat )
 import Data.Ord ( comparing )
+
 import Types
 import Scanner as Scanner
 import Lexer as Lexer
 import Index as Index
-
-simpleQuery :: Word -> IndexMap -> [(FilePath, Int)]
-simpleQuery w m = map (\(path, positions) -> (path, length positions)) result
-    where
-        result = Index.find w m
+import Query as Query
 
 printResult :: [(FilePath, Int)] -> IO ()
 printResult result = do
@@ -30,5 +27,5 @@ main = do
         return (path, occurrenceMap)
 
     let indexMap = Index.build occurrences
-    let result = simpleQuery query indexMap
+    let result = Query.simple query indexMap
     printResult result
