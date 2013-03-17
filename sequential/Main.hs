@@ -18,7 +18,7 @@ printResult result = do
 
 main :: IO ()
 main = do
-    (path:query:_) <- getArgs
+    (path:queryString:_) <- getArgs
     files <- Scanner.getAllFiles path
 
     occurrences <- forM files $ \path -> do
@@ -27,5 +27,6 @@ main = do
         return (path, occurrenceMap)
 
     let indexMap = Index.build occurrences
-    let result = Query.simple query indexMap
+    let query = Query.parse queryString
+    let result = Query.perform query indexMap
     printResult result

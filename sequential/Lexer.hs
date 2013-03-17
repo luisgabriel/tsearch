@@ -1,16 +1,17 @@
-module Lexer ( processContent ) where
+module Lexer ( processContent
+             , tokenize ) where
 
 import Data.Char ( isAlphaNum, toLower )
 import qualified Data.Map as Map
 import Types
 
-split :: String -> [Word]
-split content = words $ map toLower $ filter (\c -> isAlphaNum c || c == ' ') content
+tokenize :: String -> [Word]
+tokenize content = words $ map toLower $ filter (\c -> isAlphaNum c || c == ' ') content
 
 processContent :: String -> OccurrenceMap
 processContent content = process' words 0 Map.empty
     where
-        words = split content
+        words = tokenize content
 
 process' :: [Word] -> Int -> OccurrenceMap -> OccurrenceMap
 process' [] _ map = map
