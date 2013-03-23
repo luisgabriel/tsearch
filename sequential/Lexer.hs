@@ -1,12 +1,12 @@
 module Lexer ( processContent
              , tokenize ) where
 
-import Data.Char ( isAlphaNum, toLower )
+import Data.Char ( isAscii, isAlphaNum, toLower )
 import qualified Data.Map as Map
 import Types
 
 tokenize :: String -> [Word]
-tokenize content = words $ map toLower $ filter (\c -> isAlphaNum c || c == ' ') content
+tokenize content = words $ map toLower $ filter (\c -> (isAscii c && isAlphaNum c) || c == ' ') content
 
 processContent :: String -> OccurrenceMap
 processContent content = process' words 0 Map.empty
