@@ -11,8 +11,8 @@ tokenize content = words $ map toLower $ filter (\c -> (isAscii c && isAlphaNum 
 processContent :: String -> OccurrenceMap
 processContent content = process' words 0 Map.empty
     where
-        words = tokenize content
+        words' = tokenize content
 
 process' :: [Word] -> Int -> OccurrenceMap -> OccurrenceMap
-process' [] _ map = map
-process' (w:ws) i map = process' ws (i + 1) $ Map.insertWith (++) w [i] map
+process' [] _ map' = map'
+process' (w:ws) i map' = process' ws (i + 1) $ Map.insertWith (++) w [i] map'
