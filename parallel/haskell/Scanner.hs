@@ -4,8 +4,7 @@ import System.Directory ( getDirectoryContents, doesFileExist, doesDirectoryExis
 import System.FilePath
 import Control.Monad ( filterM, forM_ )
 import Control.Concurrent.STM ( atomically )
-import Control.Concurrent.STM.TMVar
-import Data.Sequence as Seq
+import Control.Concurrent.STM.TChan
 
 getDirectoryEntries :: FilePath -> IO ([FilePath], [FilePath])
 getDirectoryEntries path = do
@@ -15,12 +14,8 @@ getDirectoryEntries path = do
     dirs <- filterM doesDirectoryExist filtered
     return (files, dirs)
 
-scan :: FilePath -> TMVar (Seq FilePath) -> IO ()
-scan dirPath bufferVar = do
+scan :: FilePath -> TChan FilePath -> IO ()
+scan dirPath buffer = do
     (files, dirs) <- getDirectoryEntries dirPath
-
-    atomically $ do
-        buffer <- takeTMVar bufferVar
-        putTMVar bufferVar $ buffer >< (Seq.fromList files)
-
-    forM_ dirs $ flip scan bufferVar
+    forM_ files $ atomically . (writeTChan buffer)
+    forM_ dirs $ flip scan buffer
