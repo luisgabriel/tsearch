@@ -1,9 +1,10 @@
 import System.Environment ( getArgs )
 import Control.Monad ( forM_ )
-import Control.Concurrent ( forkIO, threadDelay )
+import Control.Concurrent ( forkFinally )
 import Control.Concurrent.STM ( atomically )
 import Control.Concurrent.STM.TChan
-import qualified Data.Map as Map
+import Control.Concurrent.STM.SSem as Sem
+import Control.Exception
 
 import Scanner
 import Lexer
@@ -20,13 +21,15 @@ consumer taskId buffer = do
 main :: IO ()
 main = do
     (path:_) <- getArgs
+    let nWorkers = 8;
 
     buffer <- atomically newTChan
 
-    forM_ [1..8] $ \taskId -> forkIO (consumer taskId buffer)
+    finishWork <- atomically $ Sem.new (1 - nWorkers)
+    forM_ [1..nWorkers] $
+        \taskId -> forkFinally (consumer taskId buffer) (\_ -> (atomically $ Sem.signal finishWork))
 
     Scanner.scan path buffer
 
-
-    threadDelay 4000000
-
+    (atomically $ Sem.wait finishWork)
+        `catch` \BlockedIndefinitelyOnSTM -> (atomically $ Sem.wait finishWork)
