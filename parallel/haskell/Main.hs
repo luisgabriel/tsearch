@@ -9,13 +9,13 @@ import Control.Exception
 import Scanner
 import Lexer
 
-consumer :: Int -> TChan FilePath -> IO ()
-consumer taskId buffer = do
+processFile :: Int -> TChan FilePath -> IO ()
+processFile taskId buffer = do
     filePath <- atomically $ readTChan buffer
     content <- readFile filePath
     let occurrenceMap = Lexer.processContent content
     putStrLn $ "Thread " ++ (show taskId) ++ ". File: " ++ filePath ++ ". Words: " ++ (show $ Map.size occurrenceMap)
-    consumer taskId buffer
+    processFile taskId buffer
 
 
 main :: IO ()
@@ -27,7 +27,7 @@ main = do
 
     finishWork <- atomically $ Sem.new (1 - nWorkers)
     forM_ [1..nWorkers] $
-        \taskId -> forkFinally (consumer taskId buffer) (\_ -> (atomically $ Sem.signal finishWork))
+        \taskId -> forkFinally (processFile taskId buffer) (\_ -> (atomically $ Sem.signal finishWork))
 
     Scanner.scan path buffer
 
