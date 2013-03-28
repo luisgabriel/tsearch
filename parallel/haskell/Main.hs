@@ -35,13 +35,14 @@ main = do
     let nSubIndices = 4 :: Int
 
     indexBuffer <- atomically newTChan
-    forM_ [1..nSubIndices] $ \_ -> atomically (writeTChan indexBuffer Index.empty)
+    forM_ [1..nSubIndices] $ \_ ->
+        atomically (writeTChan indexBuffer Index.empty)
 
     fileBuffer <- atomically newTChan
 
     finishWork <- atomically $ Sem.new (1 - nWorkers)
-    forM_ [1..nWorkers] $
-        \taskId -> forkFinally (processFile taskId fileBuffer indexBuffer) (\_ -> (atomically $ Sem.signal finishWork))
+    forM_ [1..nWorkers] $ \taskId ->
+        forkFinally (processFile taskId fileBuffer indexBuffer) (\_ -> (atomically $ Sem.signal finishWork))
 
     Scanner.scan path fileBuffer
 
