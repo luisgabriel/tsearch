@@ -20,10 +20,12 @@ mergeIndices _ [] _ _ = IMap.empty
 mergeIndices file word@(c:_) ps indexMap = IMap.insertWith mergeVocabularies (ord c) vocabulary indexMap
     where
         vocabulary = Map.singleton word [(file, ps)]
-        mergeVocabularies old new = Map.unionWith (++) old new
+
+mergeVocabularies :: Vocabulary -> Vocabulary -> Vocabulary
+mergeVocabularies old new = Map.unionWith (++) old new
 
 buildQueryIndex :: Index -> QueryIndex
-buildQueryIndex index = Array.array (ord '0', ord 'z') (IMap.assocs index)
+buildQueryIndex index = Array.accumArray mergeVocabularies Map.empty (ord '0', ord 'z') (IMap.assocs index)
 
 find :: Word -> QueryIndex -> [(FilePath, Positions)]
 find [] _ = []
