@@ -15,3 +15,5 @@ type Vocabulary = Map Word [(FilePath, Positions)]
 type Index = IntMap Vocabulary
 
 type QueryIndex = Array Int Vocabulary
+
+type QueryResult =  [(FilePath, Int)]
