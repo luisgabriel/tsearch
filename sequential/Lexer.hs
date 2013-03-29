@@ -9,7 +9,7 @@ tokenize :: String -> [Word]
 tokenize content = words $ map toLower $ filter (\c -> (isAscii c && isAlphaNum c) || c == ' ') content
 
 processContent :: String -> OccurrenceMap
-processContent content = process' words 0 Map.empty
+processContent content = process' words' 0 Map.empty
     where
         words' = tokenize content
 
