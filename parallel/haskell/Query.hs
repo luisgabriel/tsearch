@@ -1,4 +1,5 @@
-module Query ( parse
+module Query ( Query
+             , parse
              , perform ) where
 
 import qualified Data.Map as Map
@@ -12,6 +13,7 @@ data Query = Passage [Word]
            | Wildcard Prefix
            | And [Word]
            | Exclusion Query [Word]
+           deriving (Show)
 
 type QueryMap = Map.Map FilePath [(Word, Positions)]
 

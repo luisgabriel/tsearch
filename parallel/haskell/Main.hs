@@ -1,12 +1,9 @@
 import System.Environment ( getArgs )
 import Control.Monad ( forM_ )
-import Control.Concurrent ( forkFinally, forkIO )
-import Control.Concurrent.STM ( atomically )
-import Control.Concurrent.STM.TChan
-import Control.Concurrent.STM.TVar
+import Control.Concurrent ( forkIO )
+import Control.Concurrent.STM
 import Control.Concurrent.STM.SSem as Sem
 import Control.DeepSeq
-import Control.Exception
 import Data.List ( sortBy )
 import Data.Monoid ( mconcat )
 import Data.Ord ( comparing )
@@ -16,46 +13,78 @@ import Lexer
 import Index
 import Query
 import Types
+import Buffer
 
-processFile :: Int -> TChan FilePath -> TChan Index -> IO ()
-processFile taskId fileBuffer indexBuffer = do
-    filePath <- atomically $ readTChan fileBuffer
+-- (max files per index, TChan (remaing slots, index))
+type IndexBuffer = (Int, TChan (Int, Index))
+
+createQueryIndex :: Index -> Buffer QueryIndex -> IO ()
+createQueryIndex index buffer = do
+    let queryIndex = Index.buildQueryIndex index
+    let output' = deepseq queryIndex "Query index created"
+    putStrLn output'
+    atomically $ writeBuffer buffer queryIndex
+
+processRemaingIndices :: TChan (Int, Index) -> Buffer QueryIndex -> IO ()
+processRemaingIndices indexBuffer queryIndexBuffer = do
+    response <- atomically $ tryReadTChan indexBuffer
+    case response of
+        Nothing -> atomically $ enableFlag queryIndexBuffer
+        Just (_, index) -> do
+            createQueryIndex index queryIndexBuffer
+            processRemaingIndices indexBuffer queryIndexBuffer
+
+waiter :: SSem -> TChan (Int, Index) -> Buffer QueryIndex -> IO ()
+waiter finishProcessing indexBuffer queryIndexBuffer = do
+    atomically $ Sem.wait finishProcessing
+    processRemaingIndices indexBuffer queryIndexBuffer
+
+processFile' :: Int -> FilePath -> IndexBuffer -> Buffer QueryIndex -> IO ()
+processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer = do
     content <- readFile filePath
     let occurrenceMap = Lexer.processContent content
 
-    index <-  atomically $ readTChan indexBuffer
+    (fileCounter, index) <- atomically $ readTChan indexBuffer
     let newIndex = Index.insert (filePath, occurrenceMap) index
-    atomically $ writeTChan indexBuffer newIndex
 
     let output = deepseq newIndex ("Thread " ++ (show taskId) ++ ". File: " ++ filePath)
     putStrLn output
 
-    processFile taskId fileBuffer indexBuffer
+    if (fileCounter - 1 > 0)
+        then atomically $ writeTChan indexBuffer (fileCounter - 1, newIndex)
+        else do
+            createQueryIndex newIndex queryIndexBuffer
+            atomically $ writeTChan indexBuffer (maxFiles, Index.empty)
 
-generateQueryIndices :: TChan Index -> TChan QueryIndex -> IO ()
-generateQueryIndices indexBuffer queryIndexBuffer = do
-    index <- atomically $ readTChan indexBuffer
-    let queryIndex = Index.buildQueryIndex index
+processFile :: Int -> Buffer FilePath -> IndexBuffer -> Buffer QueryIndex -> SSem -> IO ()
+processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing = do
+    next <- atomically $ readBuffer fileBuffer
+    case next of
+        Nothing -> atomically $ Sem.signal finishProcessing
+        Just filePath -> do
+            processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer
+            processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing
 
-    let output = deepseq queryIndex "Query index created"
-    putStrLn output
-
-    atomically $ writeTChan queryIndexBuffer queryIndex
-    generateQueryIndices indexBuffer queryIndexBuffer
-
-search :: String -> TChan QueryIndex -> TVar QueryResult -> IO ()
-search rawQuery indexBuffer resultContainer = do
-    let query = Query.parse rawQuery
-    index <- atomically $ readTChan indexBuffer
+search' :: Query -> QueryIndex -> TVar QueryResult -> IO ()
+search' query index resultVar= do
     let result = Query.perform query index
 
-    let output = deepseq result ("Query \"" ++ rawQuery ++ "\" performed")
+    let output = deepseq result ("Query \"" ++ (show query) ++ "\" performed")
     putStrLn output
 
     atomically $ do
-        allResults <- readTVar resultContainer
+        allResults <- readTVar resultVar
         let newResult = allResults ++ result
-        writeTVar resultContainer newResult
+        writeTVar resultVar newResult
+
+search :: Query -> Buffer QueryIndex -> TVar QueryResult -> IO ()
+search query indexBuffer resultVar = do
+    response <- atomically $ readBuffer indexBuffer
+    case response of
+        Nothing -> return ()
+        Just index -> do
+            search' query index resultVar
+            search query indexBuffer resultVar
 
 printResult :: [(FilePath, Int)] -> IO ()
 printResult result = do
@@ -67,28 +96,25 @@ main :: IO ()
 main = do
     (path:rawQuery:_) <- getArgs
     let nWorkers = 8
-    let nSubIndices = 1 :: Int
+    let initialSubIndices = 4 :: Int
+    let maxFiles = 3 -- max files processed per subindex
 
+    fileBuffer <- atomically newEmptyBuffer
     indexBuffer <- atomically newTChan
-    forM_ [1..nSubIndices] $ \_ ->
-        atomically (writeTChan indexBuffer Index.empty)
+    queryIndexBuffer <- atomically newEmptyBuffer
 
-    fileBuffer <- atomically newTChan
-
-    finishWork <- atomically $ Sem.new (1 - nWorkers)
-    forM_ [1..nWorkers] $ \taskId ->
-        forkFinally (processFile taskId fileBuffer indexBuffer) (\_ -> (atomically $ Sem.signal finishWork))
+    forM_ [1..initialSubIndices] $ \_ ->
+        atomically (writeTChan indexBuffer (maxFiles, Index.empty))
 
     Scanner.scan path fileBuffer
 
-    (atomically $ Sem.wait finishWork)
-        `catch` \BlockedIndefinitelyOnSTM -> (atomically $ Sem.wait finishWork)
+    finishProcessing <- atomically $ Sem.new (1 - nWorkers)
+    forM_ [1..nWorkers] $ \taskId ->
+        forkIO $ processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing
 
-    queryIndexBuffer <- atomically newTChan
-    _ <- forkIO $ generateQueryIndices indexBuffer queryIndexBuffer
+    _ <- forkIO $ waiter finishProcessing indexBuffer queryIndexBuffer
 
-
-    resultContainer <- atomically $ newTVar []
-    search rawQuery queryIndexBuffer resultContainer
-    finalResult <- atomically $ readTVar resultContainer
+    resultVar <- atomically $ newTVar []
+    search (Query.parse rawQuery) queryIndexBuffer resultVar
+    finalResult <- atomically $ readTVar resultVar
     printResult finalResult
