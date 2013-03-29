@@ -18,9 +18,8 @@ type IndexBuffer = (Int, TChan (Int, Index))
 
 createQueryIndex :: Index -> Buffer QueryIndex -> IO ()
 createQueryIndex index buffer = do
-    let queryIndex = Index.buildQueryIndex index
-    let output' = deepseq queryIndex "Query index created"
-    putStrLn output'
+    queryIndex <- return $!! Index.buildQueryIndex index
+    putStrLn "Sub-index created"
     atomically $ writeBuffer buffer queryIndex
 
 
@@ -43,18 +42,17 @@ waiter finishProcessing indexBuffer queryIndexBuffer = do
 processFile' :: Int -> FilePath -> IndexBuffer -> Buffer QueryIndex -> IO ()
 processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer = do
     content <- readFile filePath
-    let occurrenceMap = Lexer.processContent content
+    occurrenceMap <- return $!! Lexer.processContent content
 
     (fileCounter, index) <- atomically $ readTChan indexBuffer
     let newIndex = Index.insert (filePath, occurrenceMap) index
 
-    let output = deepseq newIndex ("Thread " ++ (show taskId) ++ ". File: " ++ filePath)
-    putStrLn output
+    putStrLn ("Thread " ++ (show taskId) ++ ". File: " ++ filePath)
 
     if (fileCounter - 1 > 0)
         then atomically $ writeTChan indexBuffer (fileCounter - 1, newIndex)
         else do
-            createQueryIndex newIndex queryIndexBuffer
+            _ <- forkIO $ createQueryIndex newIndex queryIndexBuffer
             atomically $ writeTChan indexBuffer (maxFiles, Index.empty)
 
 
@@ -84,10 +82,8 @@ processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer = d
 
 search' :: Query -> QueryIndex -> TVar QueryResult -> IO ()
 search' query index resultVar= do
-    let result = Query.perform query index
-
-    let output = deepseq result ("Query \"" ++ (show query) ++ "\" performed")
-    putStrLn output
+    result <- return $!! Query.perform query index
+    putStrLn ("Query \"" ++ (show query) ++ "\" performed")
 
     atomically $ do
         allResults <- readTVar resultVar
