@@ -8,11 +8,11 @@ import Types
 tokenize :: String -> [Word]
 tokenize content = words $ map toLower $ filter (\c -> (isAscii c && isAlphaNum c) || c == ' ') content
 
-processContent :: String -> Occurrences
-processContent content = process' words' 0 Map.empty
+processContent :: String -> (Int, Occurrences)
+processContent content = process' words' (0, Map.empty)
     where
         words' = tokenize content
 
-process' :: [Word] -> Int -> Occurrences -> Occurrences
-process' [] _ map' = map'
-process' (w:ws) i map' = process' ws (i + 1) $ Map.insertWith (++) w [i] map'
+process' :: [Word] -> (Int, Occurrences) -> (Int, Occurrences)
+process' [] pair = pair
+process' (w:ws) (i, map') = process' ws (i + 1, Map.insertWith (++) w [i] map')

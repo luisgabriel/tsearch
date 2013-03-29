@@ -42,10 +42,10 @@ waiter finishProcessing indexBuffer queryIndexBuffer = do
 processFile' :: Int -> FilePath -> IndexBuffer -> Buffer QueryIndex -> IO ()
 processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer = do
     content <- readFile filePath
-    occurrenceMap <- return $!! Lexer.processContent content
+    (_, occurrences) <- return $!! Lexer.processContent content
 
     (fileCounter, index) <- atomically $ readTChan indexBuffer
-    let newIndex = Index.insert (filePath, occurrenceMap) index
+    let newIndex = Index.insert (filePath, occurrences) index
 
     putStrLn ("Thread " ++ (show taskId) ++ ". File: " ++ filePath)
 
