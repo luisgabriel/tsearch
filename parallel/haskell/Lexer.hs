@@ -6,7 +6,10 @@ import qualified Data.Map as Map
 import Types
 
 tokenize :: String -> [Word]
-tokenize content = words $ map toLower $ filter (\c -> (isAscii c && isAlphaNum c) || c == ' ') content
+tokenize content = words $ map lowerAndReplace $ filter isValid content
+    where
+        isValid c = (isAscii c && isAlphaNum c) || c == ' ' || c == '\n'
+        lowerAndReplace c = if (c == '\n') then ' ' else toLower c
 
 processContent :: String -> (Int, Occurrences)
 processContent content = process' words' (0, Map.empty)
