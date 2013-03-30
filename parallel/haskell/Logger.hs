@@ -18,7 +18,7 @@ import Data.Ord ( comparing )
 import Query
 import Buffer
 
-data Event = FileProcessed Int FilePath Int
+data Event = FileProcessed Int FilePath Int Int
            | SubIndexCompleted
            | QueryPerformed Query
            | SearchPerformed [(FilePath, Int)]
@@ -29,8 +29,8 @@ type LogBuffer = Buffer Event
 -- (kbytes, files, words)
 type InfoState = (Double, Int, Int)
 
-fileProcessed :: Buffer Event -> Int -> FilePath -> Int -> IO ()
-fileProcessed buffer taskId path words' =  atomically $ writeBuffer buffer $ FileProcessed taskId path words'
+fileProcessed :: Buffer Event -> Int -> FilePath -> Int -> Int -> IO ()
+fileProcessed buffer taskId path words' indexedWords' =  atomically $ writeBuffer buffer $ FileProcessed taskId path words' indexedWords'
 
 subIndexCompleted :: Buffer Event -> IO ()
 subIndexCompleted buffer = atomically $ writeBuffer buffer $ SubIndexCompleted
@@ -59,21 +59,22 @@ listen' buffer state = do
             newState <- processEvent event state
             listen' buffer newState
 
-printProgress :: Int -> FilePath -> InfoState -> IO ()
-printProgress taskId path (bytes, totalFiles, totalWords) = do
+printProgress :: Int -> FilePath -> InfoState -> Int -> IO ()
+printProgress taskId path (bytes, totalFiles, totalWords) indexedWords' = do
     putStrLn "-----"
     putStrLn $ "[Thread " ++ (show taskId) ++ "]"
     putStrLn $ "New file processed: " ++ path
     putStrLn $ printf "Kbytes processed so far: %.3f" bytes
     putStrLn $ "Files processed so far: " ++ (show totalFiles)
     putStrLn $ "Words found so far: " ++ (show totalWords)
+    putStrLn $ "Words in the index: " ++ (show indexedWords')
 
 processEvent :: Event -> InfoState -> IO InfoState
-processEvent (FileProcessed taskId path words') (bytes, totalFiles, totalWords) = do
+processEvent (FileProcessed taskId path words' indexedWords') (bytes, totalFiles, totalWords) = do
     size <- withFile path ReadMode hFileSize
     let newSize = bytes + (fromIntegral size) / 1024
     let newState = (newSize, totalFiles + 1, totalWords + words')
-    printProgress taskId path newState
+    printProgress taskId path newState indexedWords'
     return newState
 
 processEvent SubIndexCompleted state = do
