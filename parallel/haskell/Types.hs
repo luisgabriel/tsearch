@@ -12,8 +12,18 @@ type Occurrences = Map Word Positions
 
 type Vocabulary = Map Word [(FilePath, Positions)]
 
-type Index = IntMap Vocabulary
+data Index = Index Int (IntMap Vocabulary)
 
-type QueryIndex = Array Int Vocabulary
+data QueryIndex = QueryIndex Int (Array Int Vocabulary)
 
 type QueryResult =  [(FilePath, Int)]
+
+
+class TSearchIndex a where
+    numberOfFiles :: a -> Int
+
+instance TSearchIndex Index where
+    numberOfFiles (Index n _) = n
+
+instance TSearchIndex QueryIndex where
+    numberOfFiles (QueryIndex n _) = n
