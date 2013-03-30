@@ -1,20 +1,12 @@
 import System.Environment ( getArgs )
-import Control.Monad ( forM_ )
+import Control.Concurrent ( forkIO, threadDelay )
 import Control.Concurrent.STM
-import Data.List ( sortBy )
-import Data.Monoid ( mconcat )
-import Data.Ord ( comparing )
 
 import Scanner
 import Query
 import Buffer
 import Engine
-
-printResult :: [(FilePath, Int)] -> IO ()
-printResult result = do
-    let orderedResult = sortBy (mconcat [flip $ comparing snd, comparing fst]) result
-    forM_ orderedResult $ \(filePath, total) ->
-        putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show total)
+import Logger ( listen )
 
 main :: IO ()
 main = do
@@ -23,13 +15,14 @@ main = do
     let initialSubIndices = 4 :: Int
     let maxFiles = 3 -- max files processed per subindex
 
+    logBuffer <- atomically newEmptyBuffer
+    _ <- forkIO $ Logger.listen logBuffer
+
     fileBuffer <- atomically newEmptyBuffer
     queryIndexBuffer <- atomically newEmptyBuffer
 
     Scanner.scan path fileBuffer
-    Engine.processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer
+    Engine.processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer logBuffer
 
-    resultVar <- atomically $ newTVar []
-    Engine.search (Query.parse rawQuery) queryIndexBuffer resultVar
-    finalResult <- atomically $ readTVar resultVar
-    printResult finalResult
+    Engine.search (Query.parse rawQuery) queryIndexBuffer [] logBuffer
+    threadDelay 10000

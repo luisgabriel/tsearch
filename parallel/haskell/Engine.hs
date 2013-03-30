@@ -12,90 +12,84 @@ import Index
 import Query
 import Types
 import Buffer
+import Logger
 
 -- (max files per index, TChan (remaing slots, index))
 type IndexBuffer = (Int, TChan (Int, Index))
 
-createQueryIndex :: Index -> Buffer QueryIndex -> IO ()
-createQueryIndex index buffer = do
+createQueryIndex :: Index -> Buffer QueryIndex -> LogBuffer -> IO ()
+createQueryIndex index buffer logBuffer = do
     queryIndex <- return $!! Index.buildQueryIndex index
-    putStrLn "Sub-index created"
     atomically $ writeBuffer buffer queryIndex
+    Logger.subIndexCompleted logBuffer
 
 
-processRemaingIndices :: TChan (Int, Index) -> Buffer QueryIndex -> IO ()
-processRemaingIndices indexBuffer queryIndexBuffer = do
+processRemaingIndices :: TChan (Int, Index) -> Buffer QueryIndex -> LogBuffer -> IO ()
+processRemaingIndices indexBuffer queryIndexBuffer logBuffer = do
     response <- atomically $ tryReadTChan indexBuffer
     case response of
         Nothing -> atomically $ enableFlag queryIndexBuffer
         Just (_, index) -> do
-            createQueryIndex index queryIndexBuffer
-            processRemaingIndices indexBuffer queryIndexBuffer
+            createQueryIndex index queryIndexBuffer logBuffer
+            processRemaingIndices indexBuffer queryIndexBuffer logBuffer
 
 
-waiter :: SSem -> TChan (Int, Index) -> Buffer QueryIndex -> IO ()
-waiter finishProcessing indexBuffer queryIndexBuffer = do
+waiter :: SSem -> TChan (Int, Index) -> Buffer QueryIndex -> LogBuffer -> IO ()
+waiter finishProcessing indexBuffer queryIndexBuffer logBuffer = do
     atomically $ Sem.wait finishProcessing
-    processRemaingIndices indexBuffer queryIndexBuffer
+    processRemaingIndices indexBuffer queryIndexBuffer logBuffer
 
 
-processFile' :: Int -> FilePath -> IndexBuffer -> Buffer QueryIndex -> IO ()
-processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer = do
+processFile' :: Int -> FilePath -> IndexBuffer -> Buffer QueryIndex -> LogBuffer -> IO ()
+processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer logBuffer = do
     content <- readFile filePath
-    (_, occurrences) <- return $!! Lexer.processContent content
+    (words', occurrences) <- return $!! Lexer.processContent content
 
     (fileCounter, index) <- atomically $ readTChan indexBuffer
     let newIndex = Index.insert (filePath, occurrences) index
 
-    putStrLn ("Thread " ++ (show taskId) ++ ". File: " ++ filePath)
+    Logger.fileProcessed logBuffer taskId filePath words'
 
     if (fileCounter - 1 > 0)
         then atomically $ writeTChan indexBuffer (fileCounter - 1, newIndex)
         else do
-            _ <- forkIO $ createQueryIndex newIndex queryIndexBuffer
+            _ <- forkIO $ createQueryIndex newIndex queryIndexBuffer logBuffer
             atomically $ writeTChan indexBuffer (maxFiles, Index.empty)
 
 
-processFile :: Int -> Buffer FilePath -> IndexBuffer -> Buffer QueryIndex -> SSem -> IO ()
-processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing = do
+processFile :: Int -> Buffer FilePath -> IndexBuffer -> Buffer QueryIndex -> LogBuffer -> SSem -> IO ()
+processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer logBuffer finishProcessing = do
     next <- atomically $ readBuffer fileBuffer
     case next of
         Nothing -> atomically $ Sem.signal finishProcessing
         Just filePath -> do
-            processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer
-            processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing
+            processFile' taskId filePath (maxFiles, indexBuffer) queryIndexBuffer logBuffer
+            processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer logBuffer finishProcessing
 
 
-processFiles :: Int -> Int -> Int -> Buffer FilePath -> Buffer QueryIndex -> IO ()
-processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer = do
+processFiles :: Int -> Int -> Int -> Buffer FilePath -> Buffer QueryIndex -> LogBuffer -> IO ()
+processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer logBuffer = do
     indexBuffer <- atomically newTChan
     forM_ [1..initialSubIndices] $ \_ ->
         atomically (writeTChan indexBuffer (maxFiles, Index.empty))
 
     finishProcessing <- atomically $ Sem.new (1 - nWorkers)
     forM_ [1..nWorkers] $ \taskId ->
-        forkIO $ processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer finishProcessing
+        forkIO $ processFile taskId fileBuffer (maxFiles, indexBuffer) queryIndexBuffer logBuffer finishProcessing
 
-    _ <- forkIO $ waiter finishProcessing indexBuffer queryIndexBuffer
+    _ <- forkIO $ waiter finishProcessing indexBuffer queryIndexBuffer logBuffer
     return ()
 
 
-search' :: Query -> QueryIndex -> TVar QueryResult -> IO ()
-search' query index resultVar= do
-    result <- return $!! Query.perform query index
-    putStrLn ("Query \"" ++ (show query) ++ "\" performed")
+search' :: Query -> QueryIndex -> QueryResult -> QueryResult
+search' query index allResults = allResults ++ (Query.perform query index)
 
-    atomically $ do
-        allResults <- readTVar resultVar
-        let newResult = allResults ++ result
-        writeTVar resultVar newResult
-
-
-search :: Query -> Buffer QueryIndex -> TVar QueryResult -> IO ()
-search query indexBuffer resultVar = do
+search :: Query -> Buffer QueryIndex -> QueryResult -> LogBuffer -> IO ()
+search query indexBuffer result logBuffer = do
     response <- atomically $ readBuffer indexBuffer
     case response of
-        Nothing -> return ()
+        Nothing -> Logger.searchPerformed logBuffer result
         Just index -> do
-            search' query index resultVar
-            search query indexBuffer resultVar
+            newResult <- return $!! search' query index result
+            Logger.queryPerformed logBuffer query
+            search query indexBuffer newResult logBuffer
