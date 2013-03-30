@@ -20,7 +20,7 @@ createQueryIndex :: Index -> Buffer QueryIndex -> LogBuffer -> IO ()
 createQueryIndex index buffer logBuffer = do
     let queryIndex = Index.buildQueryIndex index
     atomically $ writeBuffer buffer queryIndex
-    Logger.subIndexCompleted logBuffer
+    Logger.subIndexCompleted logBuffer (id' index) (numberOfFiles index)
 
 
 processRemaingIndices :: TChan Index -> Buffer QueryIndex -> LogBuffer -> IO ()
@@ -104,5 +104,5 @@ search query indexBuffer result finishSearch logBuffer = do
             atomically $ Sem.signal finishSearch
         Just index -> do
             newResult <- return $!! search' query index result
-            Logger.queryPerformed logBuffer query
+            Logger.queryPerformed logBuffer query (id' index)
             search query indexBuffer newResult finishSearch logBuffer

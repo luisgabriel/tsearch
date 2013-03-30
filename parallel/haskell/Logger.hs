@@ -19,8 +19,8 @@ import Query
 import Buffer
 
 data Event = FileProcessed Int FilePath Int Int
-           | SubIndexCompleted
-           | QueryPerformed Query
+           | SubIndexCompleted Int Int
+           | QueryPerformed Query Int
            | SearchPerformed [(FilePath, Int)]
            | Message String
 
@@ -32,11 +32,11 @@ type InfoState = (Double, Int, Int)
 fileProcessed :: Buffer Event -> Int -> FilePath -> Int -> Int -> IO ()
 fileProcessed buffer tId path ws iWs =  atomically $ writeBuffer buffer $ FileProcessed tId path ws iWs
 
-subIndexCompleted :: Buffer Event -> IO ()
-subIndexCompleted buffer = atomically $ writeBuffer buffer $ SubIndexCompleted
+subIndexCompleted :: Buffer Event -> Int -> Int -> IO ()
+subIndexCompleted buffer iId nFiles= atomically $ writeBuffer buffer $ SubIndexCompleted iId nFiles
 
-queryPerformed :: Buffer Event -> Query -> IO ()
-queryPerformed buffer = atomically . (writeBuffer buffer) . QueryPerformed
+queryPerformed :: Buffer Event -> Query -> Int -> IO ()
+queryPerformed buffer q iId = atomically $ writeBuffer buffer $ QueryPerformed q iId
 
 searchPerformed :: Buffer Event -> [(FilePath, Int)] -> IO ()
 searchPerformed buffer = atomically . (writeBuffer buffer) . SearchPerformed
@@ -77,14 +77,14 @@ processEvent (FileProcessed taskId path words' indexedWords') (bytes, totalFiles
     printProgress taskId path newState indexedWords'
     return newState
 
-processEvent SubIndexCompleted state = do
+processEvent (SubIndexCompleted indexId nFiles) state = do
     putStrLn "-----"
-    putStrLn "Sub-index completed"
+    putStrLn $ "Sub-index " ++ (show indexId) ++ " completed. (" ++ (show nFiles) ++ " files)"
     return state
 
-processEvent (QueryPerformed query) state = do
+processEvent (QueryPerformed query indexId) state = do
     putStrLn "-----"
-    putStrLn ("Query \"" ++ (show query) ++ "\" performed")
+    putStrLn $ "Query \"" ++ (show query) ++ "\" performed on sub-index " ++ (show indexId)
     return state
 
 processEvent (SearchPerformed result) state = do
