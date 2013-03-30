@@ -1,7 +1,7 @@
 module Engine ( processFiles
-              , search) where
+              , processSearch ) where
 
-import Control.Monad ( forM_ )
+import Control.Monad ( forM, forM_ )
 import Control.Concurrent ( forkIO )
 import Control.Concurrent.STM
 import Control.Concurrent.STM.SSem as Sem
@@ -29,7 +29,13 @@ processRemaingIndices indexBuffer queryIndexBuffer logBuffer = do
     case response of
         Nothing -> atomically $ enableFlag queryIndexBuffer
         Just index -> do
-            createQueryIndex index queryIndexBuffer logBuffer
+            finished <- atomically $ isEmptyTChan indexBuffer
+            let queryIndex = Index.buildQueryIndex index
+            atomically $ do
+                if finished then (enableFlag queryIndexBuffer) else return ()
+                writeBuffer queryIndexBuffer queryIndex
+
+            Logger.subIndexCompleted logBuffer (id' index) (numberOfFiles index)
             processRemaingIndices indexBuffer queryIndexBuffer logBuffer
 
 
@@ -106,3 +112,29 @@ search query indexBuffer result finishSearch logBuffer = do
             newResult <- return $!! search' query index result
             Logger.queryPerformed logBuffer query (id' index)
             search query indexBuffer newResult finishSearch logBuffer
+
+searchMultiplexer :: Buffer QueryIndex -> [Buffer QueryIndex] -> IO ()
+searchMultiplexer master slaves = do
+    response <- atomically $ readBuffer master
+    case response of
+        Nothing -> return ()
+        Just index -> do
+            finished <- atomically $ readFlag master
+            forM_ slaves $ \slave -> atomically $ do
+                if finished then (enableFlag slave) else return ()
+                writeBuffer slave index
+
+            searchMultiplexer master slaves
+
+processSearch :: [String] -> Buffer QueryIndex -> LogBuffer -> IO SSem
+processSearch rawQueries queryIndexBuffer logBuffer = do
+    finishSearch <- atomically $ Sem.new (1 - length rawQueries)
+
+    slaveBuffers <- forM rawQueries $ \rawQuery -> do
+        qBuffer <- atomically $ newEmptyBuffer
+        _ <- forkIO $ Engine.search (Query.parse rawQuery) qBuffer [] finishSearch logBuffer
+        return qBuffer
+
+    _ <- forkIO $ Engine.searchMultiplexer queryIndexBuffer slaveBuffers
+
+    return finishSearch

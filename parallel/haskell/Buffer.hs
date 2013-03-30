@@ -1,6 +1,7 @@
 module Buffer ( Buffer
               , newEmptyBuffer
               , enableFlag
+              , readFlag
               , readBuffer
               , readBuffer'
               , writeBuffer ) where
@@ -18,6 +19,9 @@ newEmptyBuffer = do
 
 enableFlag :: Buffer a -> STM ()
 enableFlag (Buffer _ _ flagVar) = writeTVar flagVar True
+
+readFlag :: Buffer a -> STM Bool
+readFlag (Buffer _ _ flagVar) = readTVar flagVar
 
 readBuffer' :: Buffer a -> STM a
 readBuffer' (Buffer chan counterVar _) = do
