@@ -7,23 +7,20 @@ import Types
 import Lexer
 import Index
 
-type Prefix = String
+type RawQuery = String
 
-data Query = Passage [Word]
-           | Wildcard Prefix
-           | And [Word]
-           | Exclusion Query [Word]
-           deriving (Show)
+data Query = Passage RawQuery [Word]
 
 type QueryMap = Map.Map FilePath [(Word, Positions)]
 
+instance Show Query where
+    show (Passage raw _) = raw
 
 parse :: String -> Query
-parse str = Passage $ Lexer.tokenize str
-
+parse str = Passage str $ Lexer.tokenize str
 
 perform :: Query -> QueryIndex -> QueryResult
-perform (Passage words') index = case result of
+perform (Passage _ words') index = case result of
     Just map' -> filter (\x -> snd x > 0) $ Map.toList map'
     Nothing  -> []
     where
