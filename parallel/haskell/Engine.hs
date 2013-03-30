@@ -39,8 +39,8 @@ waiter finishProcessing indexBuffer queryIndexBuffer logBuffer = do
     processRemaingIndices indexBuffer queryIndexBuffer logBuffer
 
 
-processFile' :: Int -> FilePath -> Int -> TChan Index -> TVar (Set.Set Word) -> Buffer QueryIndex -> LogBuffer -> IO ()
-processFile' taskId filePath maxFiles indexBuffer wordSetVar queryIndexBuffer logBuffer = do
+processFile' :: Int -> FilePath -> Int -> TChan Index -> TVar Int -> TVar (Set.Set Word) -> Buffer QueryIndex -> LogBuffer -> IO ()
+processFile' taskId filePath maxFiles indexBuffer indexIdVar wordSetVar queryIndexBuffer logBuffer = do
     content <- readFile filePath
     (words', occurrences) <- return $!! Lexer.processContent content
 
@@ -58,30 +58,35 @@ processFile' taskId filePath maxFiles indexBuffer wordSetVar queryIndexBuffer lo
         then atomically $ writeTChan indexBuffer newIndex
         else do
             _ <- forkIO $ createQueryIndex newIndex queryIndexBuffer logBuffer
-            atomically $ writeTChan indexBuffer Index.empty
+            atomically $ do
+                indexCounter <- readTVar indexIdVar
+                let nextId = indexCounter + 1
+                writeTVar indexIdVar nextId
+                writeTChan indexBuffer $ Index.newEmptyIndex nextId
 
 
-processFile :: Int -> Buffer FilePath -> Int -> TChan Index -> TVar (Set.Set Word) -> Buffer QueryIndex -> LogBuffer -> SSem -> IO ()
-processFile taskId fileBuffer maxFiles indexBuffer wordSetVar queryIndexBuffer logBuffer finishProcessing = do
+processFile :: Int -> Buffer FilePath -> Int -> TChan Index -> TVar Int -> TVar (Set.Set Word) -> Buffer QueryIndex -> LogBuffer -> SSem -> IO ()
+processFile taskId fileBuffer maxFiles indexBuffer indexIdVar wordSetVar queryIndexBuffer logBuffer finishProcessing = do
     next <- atomically $ readBuffer fileBuffer
     case next of
         Nothing -> atomically $ Sem.signal finishProcessing
         Just filePath -> do
-            processFile' taskId filePath maxFiles indexBuffer wordSetVar queryIndexBuffer logBuffer
-            processFile taskId fileBuffer maxFiles indexBuffer wordSetVar queryIndexBuffer logBuffer finishProcessing
+            processFile' taskId filePath maxFiles indexBuffer indexIdVar wordSetVar queryIndexBuffer logBuffer
+            processFile taskId fileBuffer maxFiles indexBuffer indexIdVar wordSetVar queryIndexBuffer logBuffer finishProcessing
 
 
 processFiles :: Int -> Int -> Int -> Buffer FilePath -> Buffer QueryIndex -> LogBuffer -> IO ()
 processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer logBuffer = do
     indexBuffer <- atomically newTChan
-    forM_ [1..initialSubIndices] $ \_ ->
-        atomically (writeTChan indexBuffer Index.empty)
+    forM_ [1..initialSubIndices] $ \i ->
+        atomically $ writeTChan indexBuffer $ Index.newEmptyIndex i
 
     wordSetVar <- atomically $ newTVar Set.empty
+    indexIdVar <- atomically $ newTVar initialSubIndices
 
     finishProcessing <- atomically $ Sem.new (1 - nWorkers)
     forM_ [1..nWorkers] $ \taskId ->
-        forkIO $ processFile taskId fileBuffer maxFiles indexBuffer wordSetVar queryIndexBuffer logBuffer finishProcessing
+        forkIO $ processFile taskId fileBuffer maxFiles indexBuffer indexIdVar wordSetVar queryIndexBuffer logBuffer finishProcessing
 
     _ <- forkIO $ waiter finishProcessing indexBuffer queryIndexBuffer logBuffer
     return ()
