@@ -19,9 +19,9 @@ main = do
     _ <- forkIO $ Logger.listen logBuffer
 
     fileBuffer <- atomically newEmptyBuffer
-    queryIndexBuffer <- atomically newEmptyBuffer
+    _ <- forkIO $ Scanner.scan path fileBuffer
 
-    Scanner.scan path fileBuffer
+    queryIndexBuffer <- atomically newEmptyBuffer
     Engine.processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer logBuffer
 
     Engine.search (Query.parse rawQuery) queryIndexBuffer [] logBuffer
