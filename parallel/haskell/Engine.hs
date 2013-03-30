@@ -84,12 +84,14 @@ processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer log
 search' :: Query -> QueryIndex -> QueryResult -> QueryResult
 search' query index allResults = allResults ++ (Query.perform query index)
 
-search :: Query -> Buffer QueryIndex -> QueryResult -> LogBuffer -> IO ()
-search query indexBuffer result logBuffer = do
+search :: Query -> Buffer QueryIndex -> QueryResult -> SSem -> LogBuffer -> IO ()
+search query indexBuffer result finishSearch logBuffer = do
     response <- atomically $ readBuffer indexBuffer
     case response of
-        Nothing -> Logger.searchPerformed logBuffer result
+        Nothing -> do
+            Logger.searchPerformed logBuffer result
+            atomically $ Sem.signal finishSearch
         Just index -> do
             newResult <- return $!! search' query index result
             Logger.queryPerformed logBuffer query
-            search query indexBuffer newResult logBuffer
+            search query indexBuffer newResult finishSearch logBuffer

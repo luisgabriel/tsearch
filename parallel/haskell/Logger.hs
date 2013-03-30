@@ -4,7 +4,8 @@ module Logger ( LogBuffer
               , subIndexCompleted
               , queryPerformed
               , searchPerformed
-              , listen ) where
+              , listen
+              , finish ) where
 
 import System.IO
 import Text.Printf
@@ -42,6 +43,9 @@ searchPerformed buffer result = atomically $ writeBuffer buffer $ SearchPerforme
 
 log :: Buffer Event -> String -> IO ()
 log buffer message = atomically $ writeBuffer buffer $ Message message
+
+finish :: Buffer Event -> IO ()
+finish = atomically . enableFlag
 
 listen :: Buffer Event -> IO ()
 listen buffer = listen' buffer (0.0, 0, 0)

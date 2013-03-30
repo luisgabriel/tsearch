@@ -1,12 +1,14 @@
 import System.Environment ( getArgs )
-import Control.Concurrent ( forkIO, threadDelay )
-import Control.Concurrent.STM
+import Control.Concurrent ( forkIO, forkFinally )
+import Control.Concurrent.STM ( atomically )
+import Control.Concurrent.STM.TMVar
+import Control.Concurrent.STM.SSem as Sem
 
 import Scanner
 import Query
 import Buffer
 import Engine
-import Logger ( listen )
+import Logger
 
 main :: IO ()
 main = do
@@ -15,8 +17,9 @@ main = do
     let initialSubIndices = 4 :: Int
     let maxFiles = 3 -- max files processed per subindex
 
+    loggerFinished <- atomically $ newEmptyTMVar
     logBuffer <- atomically newEmptyBuffer
-    _ <- forkIO $ Logger.listen logBuffer
+    _ <- forkFinally (Logger.listen logBuffer) (\_ -> atomically $ putTMVar loggerFinished ())
 
     fileBuffer <- atomically newEmptyBuffer
     _ <- forkIO $ Scanner.scan path fileBuffer
@@ -24,5 +27,9 @@ main = do
     queryIndexBuffer <- atomically newEmptyBuffer
     Engine.processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer logBuffer
 
-    Engine.search (Query.parse rawQuery) queryIndexBuffer [] logBuffer
-    threadDelay 10000
+    finishSearch <- atomically $ Sem.new 0
+    Engine.search (Query.parse rawQuery) queryIndexBuffer [] finishSearch logBuffer
+
+    atomically $ Sem.wait finishSearch
+    Logger.finish logBuffer
+    atomically $ takeTMVar loggerFinished
