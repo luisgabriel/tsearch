@@ -30,19 +30,19 @@ type LogBuffer = Buffer Event
 type InfoState = (Double, Int, Int)
 
 fileProcessed :: Buffer Event -> Int -> FilePath -> Int -> Int -> IO ()
-fileProcessed buffer taskId path words' indexedWords' =  atomically $ writeBuffer buffer $ FileProcessed taskId path words' indexedWords'
+fileProcessed buffer tId path ws iWs =  atomically $ writeBuffer buffer $ FileProcessed tId path ws iWs
 
 subIndexCompleted :: Buffer Event -> IO ()
 subIndexCompleted buffer = atomically $ writeBuffer buffer $ SubIndexCompleted
 
 queryPerformed :: Buffer Event -> Query -> IO ()
-queryPerformed buffer query = atomically $ writeBuffer buffer $ QueryPerformed query
+queryPerformed buffer = atomically . (writeBuffer buffer) . QueryPerformed
 
 searchPerformed :: Buffer Event -> [(FilePath, Int)] -> IO ()
-searchPerformed buffer result = atomically $ writeBuffer buffer $ SearchPerformed result
+searchPerformed buffer = atomically . (writeBuffer buffer) . SearchPerformed
 
 log :: Buffer Event -> String -> IO ()
-log buffer message = atomically $ writeBuffer buffer $ Message message
+log buffer = atomically . (writeBuffer buffer) . Message
 
 finish :: Buffer Event -> IO ()
 finish = atomically . enableFlag
