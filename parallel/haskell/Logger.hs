@@ -21,7 +21,7 @@ import Buffer
 data Event = FileProcessed Int FilePath Int Int
            | SubIndexCompleted Int Int
            | QueryPerformed Query Int
-           | SearchPerformed [(FilePath, Int)]
+           | SearchPerformed Query [(FilePath, Int)]
            | Message String
 
 type LogBuffer = Buffer Event
@@ -33,13 +33,13 @@ fileProcessed :: Buffer Event -> Int -> FilePath -> Int -> Int -> IO ()
 fileProcessed buffer tId path ws iWs =  atomically $ writeBuffer buffer $ FileProcessed tId path ws iWs
 
 subIndexCompleted :: Buffer Event -> Int -> Int -> IO ()
-subIndexCompleted buffer iId nFiles= atomically $ writeBuffer buffer $ SubIndexCompleted iId nFiles
+subIndexCompleted buffer iId nFiles = atomically $ writeBuffer buffer $ SubIndexCompleted iId nFiles
 
 queryPerformed :: Buffer Event -> Query -> Int -> IO ()
 queryPerformed buffer q iId = atomically $ writeBuffer buffer $ QueryPerformed q iId
 
-searchPerformed :: Buffer Event -> [(FilePath, Int)] -> IO ()
-searchPerformed buffer = atomically . (writeBuffer buffer) . SearchPerformed
+searchPerformed :: Buffer Event -> Query -> [(FilePath, Int)] -> IO ()
+searchPerformed buffer q r = atomically $ writeBuffer buffer $ SearchPerformed q r
 
 log :: Buffer Event -> String -> IO ()
 log buffer = atomically . (writeBuffer buffer) . Message
@@ -87,10 +87,18 @@ processEvent (QueryPerformed query indexId) state = do
     putStrLn $ "Query \"" ++ (show query) ++ "\" performed on sub-index " ++ (show indexId)
     return state
 
-processEvent (SearchPerformed result) state = do
+processEvent (SearchPerformed query []) state = do
+    putStrLn "-----"
+    putStrLn $ "RESULT for \"" ++ (show query) ++ "\":"
+    putStrLn ""
+    putStrLn "No occurrences."
+    return state
+
+processEvent (SearchPerformed query result) state = do
     let orderedResult = sortBy (mconcat [flip $ comparing snd, comparing fst]) result
     putStrLn "-----"
-    putStrLn "RESULT:"
+    putStrLn $ "RESULT for \"" ++ (show query) ++ "\":"
+    putStrLn ""
     forM_ orderedResult $ \(filePath, total) ->
         putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show total)
     return state

@@ -106,7 +106,7 @@ search query indexBuffer result finishSearch logBuffer = do
     response <- atomically $ readBuffer indexBuffer
     case response of
         Nothing -> do
-            Logger.searchPerformed logBuffer result
+            Logger.searchPerformed logBuffer query result
             atomically $ Sem.signal finishSearch
         Just index -> do
             newResult <- return $!! search' query index result
