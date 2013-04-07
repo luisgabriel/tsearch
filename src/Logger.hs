@@ -17,11 +17,12 @@ import Data.Ord ( comparing )
 
 import Query
 import Buffer
+import Types
 
 data Event = FileProcessed Int FilePath Int Int
            | SubIndexCompleted Int Int
            | QueryPerformed Query Int
-           | SearchPerformed Query [(FilePath, Int)]
+           | SearchPerformed Query (Integer, QueryResult)
            | Message String
 
 type LogBuffer = Buffer Event
@@ -38,7 +39,7 @@ subIndexCompleted buffer iId nFiles = atomically $ writeBuffer buffer $ SubIndex
 queryPerformed :: Buffer Event -> Query -> Int -> IO ()
 queryPerformed buffer q iId = atomically $ writeBuffer buffer $ QueryPerformed q iId
 
-searchPerformed :: Buffer Event -> Query -> [(FilePath, Int)] -> IO ()
+searchPerformed :: Buffer Event -> Query -> (Integer, QueryResult) -> IO ()
 searchPerformed buffer q r = atomically $ writeBuffer buffer $ SearchPerformed q r
 
 log :: Buffer Event -> String -> IO ()
@@ -87,20 +88,23 @@ processEvent (QueryPerformed query indexId) state = do
     putStrLn $ "Query \"" ++ (show query) ++ "\" performed on sub-index " ++ (show indexId)
     return state
 
-processEvent (SearchPerformed query []) state = do
+processEvent (SearchPerformed query (_, [])) state = do
     putStrLn "-----"
     putStrLn $ "RESULT for \"" ++ (show query) ++ "\":"
     putStrLn ""
     putStrLn "No occurrences."
     return state
 
-processEvent (SearchPerformed query result) state = do
+processEvent (SearchPerformed query (time, result)) state = do
     let orderedResult = sortBy (mconcat [flip $ comparing snd, comparing fst]) result
     putStrLn "-----"
-    putStrLn $ "RESULT for \"" ++ (show query) ++ "\":"
+    putStrLn $ "== RESULTS for \"" ++ (show query) ++ "\" =="
     putStrLn ""
-    forM_ orderedResult $ \(filePath, total) ->
+    forM_ (take 50 orderedResult) $ \(filePath, total) ->
         putStrLn $ "File: " ++ filePath ++ ".   Occurrences: " ++ (show total)
+    putStrLn ""
+    putStrLn $ "Total matching files: " ++ (show $ length result)
+    putStrLn $ "Query time: " ++ (show time) ++ " ms"
     return state
 
 processEvent (Message msg) state = do

@@ -8,6 +8,7 @@ import Control.Concurrent.STM.SSem as Sem
 import Control.DeepSeq
 import qualified Data.Set as Set
 import qualified Data.Map as Map ( keysSet )
+import System.CPUTime ( getCPUTime )
 
 import Lexer
 import Index
@@ -98,10 +99,7 @@ processFiles initialSubIndices maxFiles nWorkers fileBuffer queryIndexBuffer log
     return ()
 
 
-search' :: Query -> QueryIndex -> QueryResult -> QueryResult
-search' query index allResults = allResults ++ (Query.perform query index)
-
-search :: Query -> Buffer QueryIndex -> QueryResult -> SSem -> LogBuffer -> IO ()
+search :: Query -> Buffer QueryIndex -> (Integer, QueryResult) -> SSem -> LogBuffer -> IO ()
 search query indexBuffer result finishSearch logBuffer = do
     response <- atomically $ readBuffer indexBuffer
     case response of
@@ -109,7 +107,13 @@ search query indexBuffer result finishSearch logBuffer = do
             Logger.searchPerformed logBuffer query result
             atomically $ Sem.signal finishSearch
         Just index -> do
-            newResult <- return $!! search' query index result
+            start <- getCPUTime
+            r <- return $!! Query.perform query index
+            end <- getCPUTime
+
+            let diff = (end - start) `div` (10^9)
+            let newResult = (fst result + diff, snd result ++ r)
+
             Logger.queryPerformed logBuffer query (id' index)
             search query indexBuffer newResult finishSearch logBuffer
 
@@ -132,7 +136,7 @@ processSearch rawQueries queryIndexBuffer logBuffer = do
 
     slaveBuffers <- forM rawQueries $ \rawQuery -> do
         qBuffer <- atomically $ newEmptyBuffer
-        _ <- forkIO $ Engine.search (Query.parse rawQuery) qBuffer [] finishSearch logBuffer
+        _ <- forkIO $ Engine.search (Query.parse rawQuery) qBuffer (0, []) finishSearch logBuffer
         return qBuffer
 
     _ <- forkIO $ Engine.searchMultiplexer queryIndexBuffer slaveBuffers
