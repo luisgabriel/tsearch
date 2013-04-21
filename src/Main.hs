@@ -11,8 +11,8 @@ import Logger
 
 main :: IO ()
 main = do
-    (path:rawQueries) <- getArgs
-    let nWorkers = 8
+    (path:nW:rawQueries) <- getArgs
+    let nWorkers = (read nW) :: Int
     let initialSubIndices = 4 :: Int
     let maxFiles = 3 -- max files processed per subindex
 
