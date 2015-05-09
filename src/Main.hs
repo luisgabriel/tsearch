@@ -3,6 +3,7 @@ import Control.Concurrent ( forkIO, forkFinally )
 import Control.Concurrent.STM ( atomically )
 import Control.Concurrent.STM.TMVar
 import Control.Concurrent.STM.SSem as Sem
+import GHC.Conc ( numCapabilities )
 
 import Scanner
 import Buffer
@@ -11,8 +12,8 @@ import Logger
 
 main :: IO ()
 main = do
-    (path:nW:rawQueries) <- getArgs
-    let nWorkers = (read nW) :: Int
+    (path:rawQueries) <- getArgs
+    let nWorkers = numCapabilities
     let initialSubIndices = 4 :: Int
     let maxFiles = 3 -- max files processed per subindex
 
