@@ -3,6 +3,7 @@ module Index ( newEmptyIndex
              , buildQueryIndex
              , find ) where
 
+import Prelude hiding ( Word )
 import qualified Data.Map as Map
 import qualified Data.IntMap as IMap
 import qualified Data.Array as Array

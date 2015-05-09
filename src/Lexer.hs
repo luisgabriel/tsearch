@@ -1,6 +1,7 @@
 module Lexer ( processContent
              , tokenize ) where
 
+import Prelude hiding ( Word )
 import Data.Char ( isAscii, isAlphaNum, toLower )
 import qualified Data.Map as Map
 import Types

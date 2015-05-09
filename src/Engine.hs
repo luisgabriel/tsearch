@@ -1,6 +1,7 @@
 module Engine ( processFiles
               , processSearch ) where
 
+import Prelude hiding ( Word )
 import Control.Monad ( forM, forM_ )
 import Control.Concurrent ( forkIO )
 import Control.Concurrent.STM

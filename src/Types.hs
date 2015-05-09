@@ -1,5 +1,6 @@
 module Types where
 
+import Prelude hiding ( Word )
 import Data.Map
 import Data.IntMap
 import Data.Array

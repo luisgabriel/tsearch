@@ -2,6 +2,7 @@ module Query ( Query
              , parse
              , perform ) where
 
+import Prelude hiding ( Word )
 import qualified Data.Map as Map
 import Types
 import Lexer
